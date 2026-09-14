@@ -28,9 +28,9 @@ ALTER SEQUENCE departments_id_seq RESTART WITH 5;
 -- password123: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
 -- admin123:    $2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa
 INSERT INTO users (id, name, email, password_hash, role) VALUES
-(1, 'Alex Rivera', 'student@university.edu', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'STUDENT'),
-(2, 'Sarah Connor', 'student2@university.edu', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'STUDENT'),
-(3, 'Dr. Marcus Vance (Admin)', 'admin@university.edu', '$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa', 'ADMIN');
+(1, 'Alex Rivera', 'student@university.edu', '$2a$10$fi1ZMByGXsCL/um2G8eMkeEEiNh5Uw0bBUv2UCfspqTYtrDwCk6ay', 'STUDENT'),
+(2, 'Sarah Connor', 'student2@university.edu', '$2a$10$fi1ZMByGXsCL/um2G8eMkeEEiNh5Uw0bBUv2UCfspqTYtrDwCk6ay', 'STUDENT'),
+(3, 'Dr. Marcus Vance (Admin)', 'admin@university.edu', '$2a$10$.Hl9hoVOAyu6YzTQM5o4OOqaH0BrdogmEdPWjRSKCcanUljwMzpG.', 'ADMIN');
 ALTER SEQUENCE users_id_seq RESTART WITH 4;
 
 -- 3. Students

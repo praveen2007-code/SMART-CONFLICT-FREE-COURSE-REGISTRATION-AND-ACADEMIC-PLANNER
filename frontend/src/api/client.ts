@@ -9,11 +9,26 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json.error || 'API request failed');
+  const text = await res.text();
+  if (!text || text.trim().length === 0) {
+    if (!res.ok) {
+      throw new Error(`Server returned error ${res.status} (${res.statusText}). Please check that backend is running.`);
+    }
+    return {} as T;
   }
-  return json as T;
+
+  try {
+    const json = JSON.parse(text);
+    if (!res.ok) {
+      throw new Error(json.error || json.message || `API error (${res.status})`);
+    }
+    return json as T;
+  } catch (err: any) {
+    if (!res.ok) {
+      throw new Error(`Server error ${res.status}: Backend server may be offline or starting up.`);
+    }
+    throw new Error(`Invalid response format from server: ${text.substring(0, 80)}`);
+  }
 }
 
 export const api = {

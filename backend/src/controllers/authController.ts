@@ -88,7 +88,7 @@ export class AuthController {
        FROM users u
        LEFT JOIN students s ON s.user_id = u.id
        LEFT JOIN departments d ON d.id = s.department_id
-       WHERE LOWER(u.email) = LOWER($1)`,
+       WHERE u.email ILIKE $1`,
       [data.email]
     );
 
