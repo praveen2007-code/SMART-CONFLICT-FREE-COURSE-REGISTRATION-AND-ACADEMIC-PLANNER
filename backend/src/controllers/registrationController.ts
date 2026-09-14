@@ -165,8 +165,8 @@ export class RegistrationController {
         enrollmentId = updateRes.rows[0].id;
       } else {
         const insertRes = await client.query(
-          `INSERT INTO enrollments (student_id, section_id, status, enrolled_at)
-           VALUES ($1, $2, 'REGISTERED', CURRENT_TIMESTAMP)
+          `INSERT INTO enrollments (id, student_id, section_id, status, enrolled_at)
+           VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM enrollments), $1, $2, 'REGISTERED', CURRENT_TIMESTAMP)
            RETURNING id`,
           [studentId, section.section_id]
         );
@@ -175,8 +175,8 @@ export class RegistrationController {
 
       // Log in audit table
       await client.query(
-        `INSERT INTO registration_logs (student_id, course_id, section_id, action, details)
-         VALUES ($1, $2, $3, 'REGISTER', $4)`,
+        `INSERT INTO registration_logs (id, student_id, course_id, section_id, action, details)
+         VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM registration_logs), $1, $2, $3, 'REGISTER', $4)`,
         [
           studentId,
           section.course_id,
@@ -277,8 +277,8 @@ export class RegistrationController {
 
       // Audit log
       await client.query(
-        `INSERT INTO registration_logs (student_id, course_id, section_id, action, details)
-         VALUES ($1, $2, $3, 'DROP', $4)`,
+        `INSERT INTO registration_logs (id, student_id, course_id, section_id, action, details)
+         VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM registration_logs), $1, $2, $3, 'DROP', $4)`,
         [
           enrollment.student_id,
           enrollment.course_id,

@@ -35,8 +35,8 @@ export class AuthController {
 
     // Insert user
     const userRes = await query<{ id: number; name: string; email: string; role: string }>(
-      `INSERT INTO users (name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (id, name, email, password_hash, role)
+       VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM users), $1, $2, $3, $4)
        RETURNING id, name, email, role`,
       [data.name, data.email.toLowerCase(), passwordHash, data.role]
     );
@@ -49,8 +49,8 @@ export class AuthController {
       const studentCode = `STU-2026-${randomSuffix}`;
 
       const stuRes = await query(
-        `INSERT INTO students (user_id, student_id, department_id, semester, max_credits, current_gpa)
-         VALUES ($1, $2, $3, $4, 20, 3.75)
+        `INSERT INTO students (id, user_id, student_id, department_id, semester, max_credits, current_gpa)
+         VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM students), $1, $2, $3, $4, 20, 3.75)
          RETURNING id, student_id, semester, max_credits, current_gpa`,
         [user.id, studentCode, deptId, data.semester]
       );
