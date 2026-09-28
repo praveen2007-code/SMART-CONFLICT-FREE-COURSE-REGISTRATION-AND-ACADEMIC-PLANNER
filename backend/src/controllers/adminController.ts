@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { query, pool } from '../config/db';
+import {
+  Course,
+  CourseSection,
+  Enrollment,
+  Student,
+  User,
+  Department
+} from '../models';
 import { SeatService } from '../services/seatService';
 
 const courseSchema = z.object({
@@ -39,61 +46,56 @@ export class AdminController {
    * Get Admin Overview Analytics & Enrollment Statistics
    */
   public static async getStats(req: Request, res: Response): Promise<void> {
-    // 1. Total counts
-    const totalStudentsRes = await query('SELECT COUNT(*) as count FROM students');
-    const totalCoursesRes = await query('SELECT COUNT(*) as count FROM courses');
-    const activeRegistrationsRes = await query("SELECT COUNT(*) as count FROM enrollments WHERE status = 'REGISTERED'");
+    const totalStudents = await Student.countDocuments();
+    const totalCourses = await Course.countDocuments();
+    const activeRegistrations = await Enrollment.countDocuments({ status: 'REGISTERED' });
 
-    // 2. Course Sections with enrollment levels
-    const sectionsRes = await query(
-      `SELECT cs.id, cs.section_code, cs.faculty_name, cs.max_capacity,
-              c.id as course_id, c.code as course_code, c.name as course_name,
-              COUNT(e.id) FILTER (WHERE e.status = 'REGISTERED') as enrolled_count
-       FROM course_sections cs
-       JOIN courses c ON c.id = cs.course_id
-       LEFT JOIN enrollments e ON e.section_id = cs.id
-       GROUP BY cs.id, c.id, c.code, c.name
-       ORDER BY enrolled_count DESC`
-    );
+    const sections = await CourseSection.find();
+    const courses = await Course.find();
+    const courseMap = new Map<number, any>();
+    courses.forEach((c) => courseMap.set(c.id, c));
 
     const fullCourses: any[] = [];
     const lowEnrollmentCourses: any[] = [];
 
-    const sectionStats = sectionsRes.rows.map((s) => {
-      const enrolled = parseInt(s.enrolled_count || '0', 10);
-      const capacity = s.max_capacity;
-      const available = Math.max(0, capacity - enrolled);
-      const percentage = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
+    const sectionStats = await Promise.all(
+      sections.map(async (s) => {
+        const enrolled = await Enrollment.countDocuments({ section_id: s.id, status: 'REGISTERED' });
+        const capacity = s.max_capacity;
+        const available = Math.max(0, capacity - enrolled);
+        const percentage = capacity > 0 ? Math.round((enrolled / capacity) * 100) : 0;
+        const c = courseMap.get(s.course_id);
 
-      const item = {
-        sectionId: s.id,
-        courseId: s.course_id,
-        courseCode: s.course_code,
-        courseName: s.course_name,
-        sectionCode: s.section_code,
-        facultyName: s.faculty_name,
-        enrolled,
-        capacity,
-        available,
-        percentage,
-        status: SeatService.calculateStatus(available, capacity)
-      };
+        const item = {
+          sectionId: s.id,
+          courseId: s.course_id,
+          courseCode: c?.code || 'UNKNOWN',
+          courseName: c?.name || 'Unknown Course',
+          sectionCode: s.section_code,
+          facultyName: s.faculty_name,
+          enrolled,
+          capacity,
+          available,
+          percentage,
+          status: SeatService.calculateStatus(available, capacity)
+        };
 
-      if (available === 0) {
-        fullCourses.push(item);
-      } else if (enrolled <= 3) {
-        lowEnrollmentCourses.push(item);
-      }
+        if (available === 0) {
+          fullCourses.push(item);
+        } else if (enrolled <= 3) {
+          lowEnrollmentCourses.push(item);
+        }
 
-      return item;
-    });
+        return item;
+      })
+    );
 
     res.json({
       success: true,
       stats: {
-        totalStudents: parseInt(totalStudentsRes.rows[0]?.count || '0', 10),
-        totalCourses: parseInt(totalCoursesRes.rows[0]?.count || '0', 10),
-        activeRegistrations: parseInt(activeRegistrationsRes.rows[0]?.count || '0', 10),
+        totalStudents,
+        totalCourses,
+        activeRegistrations,
         fullCoursesCount: fullCourses.length,
         lowEnrollmentCount: lowEnrollmentCourses.length
       },
@@ -109,41 +111,26 @@ export class AdminController {
   public static async createCourse(req: Request, res: Response): Promise<void> {
     const data = courseSchema.parse(req.body);
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    const lastCourse = await Course.findOne().sort({ id: -1 });
+    const nextCourseId = (lastCourse?.id || 0) + 1;
 
-      const courseRes = await client.query(
-        `INSERT INTO courses (code, name, credits, department_id, semester, description, is_core)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, code, name, credits, department_id, semester, description, is_core`,
-        [data.code.toUpperCase(), data.name, data.credits, data.departmentId, data.semester, data.description || '', data.isCore]
-      );
-      const newCourse = courseRes.rows[0];
+    const newCourse = await Course.create({
+      id: nextCourseId,
+      code: data.code.toUpperCase(),
+      name: data.name,
+      credits: data.credits,
+      department_id: data.departmentId,
+      semester: data.semester,
+      description: data.description || '',
+      is_core: data.isCore,
+      prerequisites: data.prerequisiteIds || []
+    });
 
-      if (data.prerequisiteIds && data.prerequisiteIds.length > 0) {
-        for (const prereqId of data.prerequisiteIds) {
-          await client.query(
-            `INSERT INTO prerequisites (course_id, prerequisite_course_id)
-             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-            [newCourse.id, prereqId]
-          );
-        }
-      }
-
-      await client.query('COMMIT');
-
-      res.status(201).json({
-        success: true,
-        message: 'Course created successfully',
-        course: newCourse
-      });
-    } catch (err: any) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    res.status(201).json({
+      success: true,
+      message: 'Course created successfully',
+      course: newCourse
+    });
   }
 
   /**
@@ -153,53 +140,26 @@ export class AdminController {
     const id = parseInt(req.params.id as string, 10);
     const data = courseSchema.partial().parse(req.body);
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    const update: any = {};
+    if (data.name !== undefined) update.name = data.name;
+    if (data.credits !== undefined) update.credits = data.credits;
+    if (data.departmentId !== undefined) update.department_id = data.departmentId;
+    if (data.semester !== undefined) update.semester = data.semester;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.isCore !== undefined) update.is_core = data.isCore;
+    if (data.prerequisiteIds !== undefined) update.prerequisites = data.prerequisiteIds;
 
-      const courseRes = await client.query(
-        `UPDATE courses
-         SET name = COALESCE($1, name),
-             credits = COALESCE($2, credits),
-             department_id = COALESCE($3, department_id),
-             semester = COALESCE($4, semester),
-             description = COALESCE($5, description),
-             is_core = COALESCE($6, is_core)
-         WHERE id = $7
-         RETURNING *`,
-        [data.name, data.credits, data.departmentId, data.semester, data.description, data.isCore, id]
-      );
-
-      if (courseRes.rows.length === 0) {
-        await client.query('ROLLBACK');
-        res.status(404).json({ success: false, error: 'Course not found' });
-        return;
-      }
-
-      if (data.prerequisiteIds) {
-        await client.query('DELETE FROM prerequisites WHERE course_id = $1', [id]);
-        for (const prereqId of data.prerequisiteIds) {
-          await client.query(
-            `INSERT INTO prerequisites (course_id, prerequisite_course_id)
-             VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-            [id, prereqId]
-          );
-        }
-      }
-
-      await client.query('COMMIT');
-
-      res.json({
-        success: true,
-        message: 'Course updated successfully',
-        course: courseRes.rows[0]
-      });
-    } catch (err: any) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+    const course = await Course.findOneAndUpdate({ id }, update, { new: true });
+    if (!course) {
+      res.status(404).json({ success: false, error: 'Course not found' });
+      return;
     }
+
+    res.json({
+      success: true,
+      message: 'Course updated successfully',
+      course
+    });
   }
 
   /**
@@ -208,15 +168,18 @@ export class AdminController {
   public static async deleteCourse(req: Request, res: Response): Promise<void> {
     const id = parseInt(req.params.id as string, 10);
 
-    const deleteRes = await query('DELETE FROM courses WHERE id = $1 RETURNING id, code', [id]);
-    if (deleteRes.rows.length === 0) {
+    const deleted = await Course.findOneAndDelete({ id });
+    if (!deleted) {
       res.status(404).json({ success: false, error: 'Course not found' });
       return;
     }
 
+    // Also delete sections
+    await CourseSection.deleteMany({ course_id: id });
+
     res.json({
       success: true,
-      message: `Course ${deleteRes.rows[0].code} deleted successfully.`
+      message: `Course ${deleted.code} deleted successfully.`
     });
   }
 
@@ -226,44 +189,38 @@ export class AdminController {
   public static async createSection(req: Request, res: Response): Promise<void> {
     const data = sectionSchema.parse(req.body);
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    const lastSection = await CourseSection.findOne().sort({ id: -1 });
+    const nextSectionId = (lastSection?.id || 0) + 1;
 
-      const secRes = await client.query(
-        `INSERT INTO course_sections (course_id, section_code, faculty_name, max_capacity, room_number, semester_term)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING *`,
-        [data.courseId, data.sectionCode, data.facultyName, data.maxCapacity, data.roomNumber, data.semesterTerm]
-      );
-      const section = secRes.rows[0];
+    const schedules = (data.schedules || []).map((s) => ({
+      section_id: nextSectionId,
+      day_of_week: s.dayOfWeek,
+      start_time: s.startTime,
+      end_time: s.endTime,
+      building: s.building || 'Main Campus',
+      room: s.room
+    }));
 
-      if (data.schedules && data.schedules.length > 0) {
-        for (const s of data.schedules) {
-          await client.query(
-            `INSERT INTO schedules (section_id, day_of_week, start_time, end_time, building, room)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [section.id, s.dayOfWeek, s.startTime, s.endTime, s.building || 'Main Campus', s.room]
-          );
-        }
-      }
+    const newSection = await CourseSection.create({
+      id: nextSectionId,
+      course_id: data.courseId,
+      section_code: data.sectionCode,
+      faculty_name: data.facultyName,
+      max_capacity: data.maxCapacity,
+      enrolled_count: 0,
+      room_number: data.roomNumber,
+      semester_term: data.semesterTerm,
+      schedules
+    });
 
-      await client.query('COMMIT');
+    // Sync Redis seat count
+    await SeatService.getAvailableSeats(nextSectionId);
 
-      // Sync Redis seat count
-      await SeatService.getAvailableSeats(section.id);
-
-      res.status(201).json({
-        success: true,
-        message: 'Course section created successfully',
-        section
-      });
-    } catch (err: any) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    res.status(201).json({
+      success: true,
+      message: 'Course section created successfully',
+      section: newSection
+    });
   }
 
   /**
@@ -273,17 +230,13 @@ export class AdminController {
     const sectionId = parseInt(req.params.id as string, 10);
     const { maxCapacity, facultyName, roomNumber } = req.body;
 
-    const secRes = await query(
-      `UPDATE course_sections
-       SET max_capacity = COALESCE($1, max_capacity),
-           faculty_name = COALESCE($2, faculty_name),
-           room_number = COALESCE($3, room_number)
-       WHERE id = $4
-       RETURNING *`,
-      [maxCapacity, facultyName, roomNumber, sectionId]
-    );
+    const update: any = {};
+    if (maxCapacity !== undefined) update.max_capacity = maxCapacity;
+    if (facultyName !== undefined) update.faculty_name = facultyName;
+    if (roomNumber !== undefined) update.room_number = roomNumber;
 
-    if (secRes.rows.length === 0) {
+    const section = await CourseSection.findOneAndUpdate({ id: sectionId }, update, { new: true });
+    if (!section) {
       res.status(404).json({ success: false, error: 'Section not found' });
       return;
     }
@@ -294,7 +247,7 @@ export class AdminController {
     res.json({
       success: true,
       message: 'Section updated successfully',
-      section: secRes.rows[0]
+      section
     });
   }
 
@@ -302,24 +255,53 @@ export class AdminController {
    * View all active student registrations across university
    */
   public static async getRegistrations(req: Request, res: Response): Promise<void> {
-    const regRes = await query(
-      `SELECT e.id, e.status, e.enrolled_at,
-              s.student_id as student_code, u.name as student_name, u.email as student_email,
-              c.code as course_code, c.name as course_name, c.credits,
-              cs.section_code, cs.faculty_name
-       FROM enrollments e
-       JOIN students s ON s.id = e.student_id
-       JOIN users u ON u.id = s.user_id
-       JOIN course_sections cs ON cs.id = e.section_id
-       JOIN courses c ON c.id = cs.course_id
-       ORDER BY e.enrolled_at DESC
-       LIMIT 100`
-    );
+    const enrollments = await Enrollment.find().sort({ enrolled_at: -1 }).limit(100);
+
+    const studentIds = enrollments.map((e) => e.student_id);
+    const students = await Student.find({ id: { $in: studentIds } });
+    const studentMap = new Map<number, any>();
+    students.forEach((s) => studentMap.set(s.id, s));
+
+    const userIds = students.map((s) => s.user_id);
+    const users = await User.find({ id: { $in: userIds } });
+    const userMap = new Map<number, any>();
+    users.forEach((u) => userMap.set(u.id, u));
+
+    const sectionIds = enrollments.map((e) => e.section_id);
+    const sections = await CourseSection.find({ id: { $in: sectionIds } });
+    const sectionMap = new Map<number, any>();
+    sections.forEach((s) => sectionMap.set(s.id, s));
+
+    const courseIds = sections.map((s) => s.course_id);
+    const courses = await Course.find({ id: { $in: courseIds } });
+    const courseMap = new Map<number, any>();
+    courses.forEach((c) => courseMap.set(c.id, c));
+
+    const registrations = enrollments.map((e) => {
+      const student = studentMap.get(e.student_id);
+      const user = student ? userMap.get(student.user_id) : null;
+      const sec = sectionMap.get(e.section_id);
+      const course = sec ? courseMap.get(sec.course_id) : null;
+
+      return {
+        id: e.id,
+        status: e.status,
+        enrolled_at: e.enrolled_at,
+        student_code: student?.student_id || 'STU',
+        student_name: user?.name || 'Student',
+        student_email: user?.email || '',
+        course_code: course?.code || 'UNKNOWN',
+        course_name: course?.name || 'Unknown Course',
+        credits: course?.credits || 3,
+        section_code: sec?.section_code || 'SEC',
+        faculty_name: sec?.faculty_name || ''
+      };
+    });
 
     res.json({
       success: true,
-      count: regRes.rows.length,
-      registrations: regRes.rows
+      count: registrations.length,
+      registrations
     });
   }
 }

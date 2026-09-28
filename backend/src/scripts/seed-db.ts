@@ -1,20 +1,17 @@
-import { pool } from '../config/db';
-import fs from 'fs';
-import path from 'path';
+import { connectDB } from '../config/db';
+import { seedMongoDatabase } from './seed-mongo';
+import mongoose from 'mongoose';
 
 async function run() {
-  const client = await pool.connect();
   try {
-    console.log('[Seed DB] Reading seed.sql...');
-    const seedPath = path.resolve(__dirname, '../../../database/seed.sql');
-    const sql = fs.readFileSync(seedPath, 'utf8');
-    await client.query(sql);
-    console.log('[Seed DB] Seed data inserted successfully!');
+    await connectDB();
+    await seedMongoDatabase();
+    console.log('[Seed DB] MongoDB Seed data inserted successfully!');
   } catch (err: any) {
     console.error('[Seed DB] Error inserting seed data:', err.message);
   } finally {
-    client.release();
-    await pool.end();
+    await mongoose.disconnect();
+    process.exit(0);
   }
 }
 

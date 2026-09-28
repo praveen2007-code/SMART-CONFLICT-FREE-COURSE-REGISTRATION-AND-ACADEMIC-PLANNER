@@ -119,6 +119,8 @@ export interface ScheduleConflict {
     time: string;
     day: string;
   };
+  overlapDay?: string;
+  overlapTime?: string;
   suggestedAlternative?: {
     courseId: number;
     courseCode: string;

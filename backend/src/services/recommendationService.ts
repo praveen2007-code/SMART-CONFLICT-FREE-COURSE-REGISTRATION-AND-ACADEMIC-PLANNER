@@ -1,4 +1,4 @@
-import { query } from '../config/db';
+import { Student, User, Department, CompletedCourse, Enrollment, CourseSection, Course } from '../models';
 
 export interface AcademicRecommendation {
   courseId: number;
@@ -35,88 +35,61 @@ export class RecommendationService {
     };
   }> {
     // 1. Get student profile
-    const studentRes = await query(
-      `SELECT s.id, s.student_id as code, s.semester, s.max_credits, s.current_gpa,
-              u.name as student_name, s.department_id, d.name as department_name
-       FROM students s
-       JOIN users u ON u.id = s.user_id
-       JOIN departments d ON d.id = s.department_id
-       WHERE s.id = $1`,
-      [studentId]
-    );
-
-    if (studentRes.rows.length === 0) {
+    const student = await Student.findOne({ id: studentId });
+    if (!student) {
       throw new Error('Student profile not found');
     }
-    const student = studentRes.rows[0];
+
+    const user = await User.findOne({ id: student.user_id });
+    const studentDept = await Department.findOne({ id: student.department_id });
 
     // 2. Get completed courses
-    const completedRes = await query<{ course_id: number; credits: number }>(
-      `SELECT cc.course_id, c.credits
-       FROM completed_courses cc
-       JOIN courses c ON c.id = cc.course_id
-       WHERE cc.student_id = $1`,
-      [studentId]
-    );
-    const completedIds = new Set<number>(completedRes.rows.map((r) => r.course_id));
-    const completedCredits = completedRes.rows.reduce((acc, r) => acc + r.credits, 0);
+    const completed = await CompletedCourse.find({ student_id: studentId });
+    const completedIds = new Set<number>(completed.map((r: any) => r.course_id));
+
+    const allCourses = await Course.find();
+    const courseMap = new Map<number, any>();
+    allCourses.forEach((c: any) => courseMap.set(c.id, c));
+
+    const completedCredits = completed.reduce((acc: number, r: any) => {
+      const c = courseMap.get(r.course_id);
+      return acc + (c?.credits || 0);
+    }, 0);
 
     // 3. Get currently registered courses
-    const registeredRes = await query<{ course_id: number; credits: number }>(
-      `SELECT cs.course_id, c.credits
-       FROM enrollments e
-       JOIN course_sections cs ON cs.id = e.section_id
-       JOIN courses c ON c.id = cs.course_id
-       WHERE e.student_id = $1 AND e.status = 'REGISTERED'`,
-      [studentId]
-    );
-    const registeredIds = new Set<number>(registeredRes.rows.map((r) => r.course_id));
-    const registeredCredits = registeredRes.rows.reduce((acc, r) => acc + r.credits, 0);
+    const activeEnrollments = await Enrollment.find({ student_id: studentId, status: 'REGISTERED' });
+    const activeSectionIds = activeEnrollments.map((e: any) => e.section_id);
+    const activeSections = await CourseSection.find({ id: { $in: activeSectionIds } });
 
-    // 4. Get all catalog courses
-    const coursesRes = await query(
-      `SELECT c.id, c.code, c.name, c.credits, c.department_id, c.semester, c.description, c.is_core,
-              d.name as department_name
-       FROM courses c
-       JOIN departments d ON d.id = c.department_id
-       ORDER BY c.semester ASC, c.is_core DESC`
-    );
+    const registeredIds = new Set<number>(activeSections.map((s: any) => s.course_id));
+    const registeredCredits = activeSections.reduce((acc: number, s: any) => {
+      const c = courseMap.get(s.course_id);
+      return acc + (c?.credits || 0);
+    }, 0);
 
-    // 5. Get all prerequisites
-    const prereqsRes = await query(
-      `SELECT p.course_id, p.prerequisite_course_id, pr.code as prereq_code, pr.name as prereq_name
-       FROM prerequisites p
-       JOIN courses pr ON pr.id = p.prerequisite_course_id`
-    );
+    // 4. Departments Map
+    const departments = await Department.find();
+    const deptMap = new Map<number, string>();
+    departments.forEach((d) => deptMap.set(d.id, d.name));
 
-    const prereqMap = new Map<number, { prereqId: number; prereqCode: string; prereqName: string }[]>();
-    for (const p of prereqsRes.rows) {
-      const list = prereqMap.get(p.course_id) || [];
-      list.push({
-        prereqId: p.prerequisite_course_id,
-        prereqCode: p.prereq_code,
-        prereqName: p.prereq_name
-      });
-      prereqMap.set(p.course_id, list);
-    }
-
-    // 6. Evaluate and score recommendations
+    // 5. Evaluate and score recommendations
     const recommendations: AcademicRecommendation[] = [];
 
-    for (const course of coursesRes.rows) {
+    for (const course of allCourses) {
       // Exclude courses already completed or currently registered
       if (completedIds.has(course.id) || registeredIds.has(course.id)) {
         continue;
       }
 
-      const reqs = prereqMap.get(course.id) || [];
+      const reqIds = course.prerequisites || [];
       let allPrereqsSatisfied = true;
-      const checkedPrereqs = reqs.map((p) => {
-        const satisfied = completedIds.has(p.prereqId);
+      const checkedPrereqs = reqIds.map((pId: number) => {
+        const pCourse = courseMap.get(pId);
+        const satisfied = completedIds.has(pId);
         if (!satisfied) allPrereqsSatisfied = false;
         return {
-          prereqCode: p.prereqCode,
-          prereqName: p.prereqName,
+          prereqCode: pCourse?.code || `C-${pId}`,
+          prereqName: pCourse?.name || 'Prerequisite',
           satisfied
         };
       });
@@ -147,15 +120,15 @@ export class RecommendationService {
       // Reason 3: Prerequisite status
       if (allPrereqsSatisfied) {
         priorityScore += 50;
-        if (reqs.length > 0) {
-          const satisfiedNames = checkedPrereqs.map((cp) => cp.prereqCode).join(', ');
+        if (reqIds.length > 0) {
+          const satisfiedNames = checkedPrereqs.map((cp: any) => cp.prereqCode).join(', ');
           reasons.push(`All prerequisites satisfied: ${satisfiedNames} ✓`);
         } else {
           reasons.push('No prerequisites required — open enrollment.');
         }
       } else {
         priorityScore -= 100;
-        const missing = checkedPrereqs.filter((cp) => !cp.satisfied).map((cp) => cp.prereqCode).join(', ');
+        const missing = checkedPrereqs.filter((cp: any) => !cp.satisfied).map((cp: any) => cp.prereqCode).join(', ');
         reasons.push(`Prerequisites missing (${missing}) — complete prerequisites first.`);
       }
 
@@ -169,7 +142,7 @@ export class RecommendationService {
         courseCode: course.code,
         courseName: course.name,
         credits: course.credits,
-        departmentName: course.department_name,
+        departmentName: deptMap.get(course.department_id) || 'Computer Science',
         semester: course.semester,
         isCore: course.is_core,
         eligible: allPrereqsSatisfied,
@@ -188,13 +161,13 @@ export class RecommendationService {
     return {
       recommendations,
       studentSummary: {
-        studentIdString: student.code,
-        studentName: student.student_name,
+        studentIdString: student.student_id,
+        studentName: user?.name || 'Student',
         semester: student.semester,
         completedCredits,
         registeredCredits,
         maxCredits: student.max_credits,
-        currentGpa: parseFloat(student.current_gpa)
+        currentGpa: student.current_gpa
       }
     };
   }

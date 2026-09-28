@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env';
-import { query } from '../config/db';
+import { User, Student } from '../models';
 import { UserRole } from '../models/types';
 
 export interface AuthUser {
@@ -9,7 +9,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   name: string;
-  studentId?: number; // Primary key of students table if role === 'STUDENT'
+  studentId?: number; // Primary key of students collection if role === 'STUDENT'
   studentCode?: string; // e.g. STU-2024-001
 }
 
@@ -34,28 +34,23 @@ export const authenticateJwt = async (req: Request, res: Response, next: NextFun
   try {
     const decoded = jwt.verify(token, ENV.JWT_SECRET) as { id: number; email: string; role: UserRole };
 
-    // Fetch user details and student record if applicable
-    const userRes = await query(
-      `SELECT u.id, u.name, u.email, u.role, s.id as student_id, s.student_id as student_code
-       FROM users u
-       LEFT JOIN students s ON s.user_id = u.id
-       WHERE u.id = $1`,
-      [decoded.id]
-    );
+    // Fetch user details from MongoDB
+    const user = await User.findOne({ id: decoded.id });
 
-    if (userRes.rows.length === 0) {
+    if (!user) {
       res.status(401).json({ success: false, error: 'User not found or session revoked.' });
       return;
     }
 
-    const row = userRes.rows[0];
+    const student = user.role === 'STUDENT' ? await Student.findOne({ user_id: user.id }) : null;
+
     req.user = {
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      role: row.role as UserRole,
-      studentId: row.student_id ? parseInt(row.student_id, 10) : undefined,
-      studentCode: row.student_code
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as UserRole,
+      studentId: student ? student.id : undefined,
+      studentCode: student ? student.student_id : undefined
     };
 
     next();
@@ -64,21 +59,21 @@ export const authenticateJwt = async (req: Request, res: Response, next: NextFun
   }
 };
 
-export const requireRole = (...roles: UserRole[]) => {
+export const requireRole = (role: UserRole) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ success: false, error: 'Authentication required.' });
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
-      res.status(403).json({
-        success: false,
-        error: `Forbidden: Access restricted to ${roles.join(' or ')} accounts.`
-      });
+    if (req.user.role !== role) {
+      res.status(403).json({ success: false, error: `Access denied. Requires ${role} privilege.` });
       return;
     }
 
     next();
   };
 };
+
+export const requireStudent = requireRole('STUDENT');
+export const requireAdmin = requireRole('ADMIN');

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { query } from '../config/db';
+import { User, Student, Department } from '../models';
 import { ENV } from '../config/env';
 
 const registerSchema = z.object({
@@ -24,8 +24,8 @@ export class AuthController {
     const data = registerSchema.parse(req.body);
 
     // Check if user already exists
-    const existing = await query('SELECT id FROM users WHERE email = $1', [data.email.toLowerCase()]);
-    if (existing.rows.length > 0) {
+    const existing = await User.findOne({ email: data.email.toLowerCase() });
+    if (existing) {
       res.status(409).json({ success: false, error: 'An account with this email already exists.' });
       return;
     }
@@ -33,14 +33,18 @@ export class AuthController {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
+    // Get next sequential numeric ID
+    const lastUser = await User.findOne().sort({ id: -1 });
+    const nextUserId = (lastUser?.id || 0) + 1;
+
     // Insert user
-    const userRes = await query<{ id: number; name: string; email: string; role: string }>(
-      `INSERT INTO users (id, name, email, password_hash, role)
-       VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM users), $1, $2, $3, $4)
-       RETURNING id, name, email, role`,
-      [data.name, data.email.toLowerCase(), passwordHash, data.role]
-    );
-    const user = userRes.rows[0];
+    const newUser = await User.create({
+      id: nextUserId,
+      name: data.name,
+      email: data.email.toLowerCase(),
+      password_hash: passwordHash,
+      role: data.role
+    });
 
     let studentRecord = null;
     if (data.role === 'STUDENT') {
@@ -48,18 +52,35 @@ export class AuthController {
       const randomSuffix = Math.floor(100 + Math.random() * 900);
       const studentCode = `STU-2026-${randomSuffix}`;
 
-      const stuRes = await query(
-        `INSERT INTO students (id, user_id, student_id, department_id, semester, max_credits, current_gpa)
-         VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM students), $1, $2, $3, $4, 20, 3.75)
-         RETURNING id, student_id, semester, max_credits, current_gpa`,
-        [user.id, studentCode, deptId, data.semester]
-      );
-      studentRecord = stuRes.rows[0];
+      const lastStudent = await Student.findOne().sort({ id: -1 });
+      const nextStudentId = (lastStudent?.id || 0) + 1;
+
+      const newStudent = await Student.create({
+        id: nextStudentId,
+        user_id: newUser.id,
+        student_id: studentCode,
+        department_id: deptId,
+        semester: data.semester,
+        max_credits: 20,
+        current_gpa: 3.75
+      });
+
+      const dept = await Department.findOne({ id: deptId });
+
+      studentRecord = {
+        id: newStudent.id,
+        studentCode: newStudent.student_id,
+        semester: newStudent.semester,
+        maxCredits: newStudent.max_credits,
+        currentGpa: newStudent.current_gpa,
+        departmentName: dept?.name || 'Computer Science & Engineering',
+        departmentCode: dept?.code || 'CS'
+      };
     }
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: newUser.id, email: newUser.email, role: newUser.role },
       ENV.JWT_SECRET,
       { expiresIn: ENV.JWT_EXPIRES_IN as any }
     );
@@ -69,10 +90,10 @@ export class AuthController {
       message: 'Registration successful',
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
         student: studentRecord
       }
     });
@@ -81,32 +102,37 @@ export class AuthController {
   public static async login(req: Request, res: Response): Promise<void> {
     const data = loginSchema.parse(req.body);
 
-    const userRes = await query(
-      `SELECT u.id, u.name, u.email, u.password_hash, u.role,
-              s.id as student_id, s.student_id as student_code, s.semester, s.max_credits, s.current_gpa,
-              d.name as department_name, d.code as department_code
-       FROM users u
-       LEFT JOIN students s ON s.user_id = u.id
-       LEFT JOIN departments d ON d.id = s.department_id
-       WHERE u.email ILIKE $1`,
-      [data.email]
-    );
-
-    if (userRes.rows.length === 0) {
+    const user = await User.findOne({ email: data.email.toLowerCase() });
+    if (!user) {
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
       return;
     }
 
-    const row = userRes.rows[0];
-    const isPasswordValid = await bcrypt.compare(data.password, row.password_hash);
-
+    const isPasswordValid = await bcrypt.compare(data.password, user.password_hash);
     if (!isPasswordValid) {
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
       return;
     }
 
+    let studentData = null;
+    if (user.role === 'STUDENT') {
+      const student = await Student.findOne({ user_id: user.id });
+      if (student) {
+        const dept = await Department.findOne({ id: student.department_id });
+        studentData = {
+          id: student.id,
+          studentCode: student.student_id,
+          semester: student.semester,
+          maxCredits: student.max_credits,
+          currentGpa: student.current_gpa,
+          departmentName: dept?.name || 'Computer Science',
+          departmentCode: dept?.code || 'CS'
+        };
+      }
+    }
+
     const token = jwt.sign(
-      { id: row.id, email: row.email, role: row.role },
+      { id: user.id, email: user.email, role: user.role },
       ENV.JWT_SECRET,
       { expiresIn: ENV.JWT_EXPIRES_IN as any }
     );
@@ -116,21 +142,11 @@ export class AuthController {
       message: 'Login successful',
       token,
       user: {
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        role: row.role,
-        student: row.student_id
-          ? {
-              id: row.student_id,
-              studentCode: row.student_code,
-              semester: row.semester,
-              maxCredits: row.max_credits,
-              currentGpa: parseFloat(row.current_gpa),
-              departmentName: row.department_name,
-              departmentCode: row.department_code
-            }
-          : null
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        student: studentData
       }
     });
   }
@@ -141,42 +157,37 @@ export class AuthController {
       return;
     }
 
-    const userRes = await query(
-      `SELECT u.id, u.name, u.email, u.role,
-              s.id as student_id, s.student_id as student_code, s.semester, s.max_credits, s.current_gpa,
-              d.name as department_name, d.code as department_code
-       FROM users u
-       LEFT JOIN students s ON s.user_id = u.id
-       LEFT JOIN departments d ON d.id = s.department_id
-       WHERE u.id = $1`,
-      [req.user.id]
-    );
-
-    if (userRes.rows.length === 0) {
+    const user = await User.findOne({ id: req.user.id });
+    if (!user) {
       res.status(404).json({ success: false, error: 'User not found' });
       return;
     }
 
-    const row = userRes.rows[0];
+    let studentData = null;
+    if (user.role === 'STUDENT') {
+      const student = await Student.findOne({ user_id: user.id });
+      if (student) {
+        const dept = await Department.findOne({ id: student.department_id });
+        studentData = {
+          id: student.id,
+          studentCode: student.student_id,
+          semester: student.semester,
+          maxCredits: student.max_credits,
+          currentGpa: student.current_gpa,
+          departmentName: dept?.name || 'Computer Science',
+          departmentCode: dept?.code || 'CS'
+        };
+      }
+    }
 
     res.json({
       success: true,
       user: {
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        role: row.role,
-        student: row.student_id
-          ? {
-              id: row.student_id,
-              studentCode: row.student_code,
-              semester: row.semester,
-              maxCredits: row.max_credits,
-              currentGpa: parseFloat(row.current_gpa),
-              departmentName: row.department_name,
-              departmentCode: row.department_code
-            }
-          : null
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        student: studentData
       }
     });
   }

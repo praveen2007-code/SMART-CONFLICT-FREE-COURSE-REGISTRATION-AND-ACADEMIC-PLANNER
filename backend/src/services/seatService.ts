@@ -1,5 +1,5 @@
 import { safeRedis } from '../config/redis';
-import { query } from '../config/db';
+import { CourseSection, Enrollment } from '../models';
 
 export type SeatStatus = 'AVAILABLE' | 'ALMOST_FULL' | 'FULL';
 
@@ -22,7 +22,7 @@ export class SeatService {
   }
 
   /**
-   * Get available seats from Redis (with DB fallback if not cached)
+   * Get available seats from Redis (with MongoDB fallback if not cached)
    */
   public static async getAvailableSeats(sectionId: number): Promise<{ available: number; capacity: number; status: SeatStatus }> {
     const key = this.getKey(sectionId);
@@ -30,12 +30,8 @@ export class SeatService {
 
     if (cached !== null) {
       const available = parseInt(cached, 10);
-      // Fetch capacity from DB if not already stored or cached
-      const secRes = await query<{ max_capacity: number }>(
-        'SELECT max_capacity FROM course_sections WHERE id = $1',
-        [sectionId]
-      );
-      const capacity = secRes.rows[0]?.max_capacity || 30;
+      const section = await CourseSection.findOne({ id: sectionId });
+      const capacity = section?.max_capacity || 30;
       return {
         available: Math.max(0, available),
         capacity,
@@ -43,23 +39,14 @@ export class SeatService {
       };
     }
 
-    // Cache miss: calculate from PostgreSQL
-    const res = await query<{ max_capacity: number; enrolled_count: string }>(
-      `SELECT cs.max_capacity,
-              COUNT(e.id) FILTER (WHERE e.status = 'REGISTERED') as enrolled_count
-       FROM course_sections cs
-       LEFT JOIN enrollments e ON e.section_id = cs.id
-       WHERE cs.id = $1
-       GROUP BY cs.id`,
-      [sectionId]
-    );
-
-    if (res.rows.length === 0) {
+    // Cache miss: calculate from MongoDB
+    const section = await CourseSection.findOne({ id: sectionId });
+    if (!section) {
       return { available: 0, capacity: 0, status: 'FULL' };
     }
 
-    const capacity = res.rows[0].max_capacity;
-    const enrolled = parseInt(res.rows[0].enrolled_count || '0', 10);
+    const enrolled = await Enrollment.countDocuments({ section_id: sectionId, status: 'REGISTERED' });
+    const capacity = section.max_capacity;
     const available = Math.max(0, capacity - enrolled);
 
     // Cache in Redis for 10 minutes
@@ -123,25 +110,18 @@ export class SeatService {
   }
 
   /**
-   * Invalidate and synchronize all section seat counts from PostgreSQL into Redis
+   * Invalidate and synchronize all section seat counts from MongoDB into Redis
    */
   public static async syncAllSeats(): Promise<void> {
     try {
-      const res = await query<{ id: number; max_capacity: number; enrolled_count: string }>(
-        `SELECT cs.id, cs.max_capacity,
-                COUNT(e.id) FILTER (WHERE e.status = 'REGISTERED') as enrolled_count
-         FROM course_sections cs
-         LEFT JOIN enrollments e ON e.section_id = cs.id
-         GROUP BY cs.id`
-      );
+      const sections = await CourseSection.find();
 
-      for (const row of res.rows) {
-        const capacity = row.max_capacity;
-        const enrolled = parseInt(row.enrolled_count || '0', 10);
-        const available = Math.max(0, capacity - enrolled);
-        await safeRedis.set(this.getKey(row.id), available.toString(), 'EX', 3600);
+      for (const sec of sections) {
+        const enrolled = await Enrollment.countDocuments({ section_id: sec.id, status: 'REGISTERED' });
+        const available = Math.max(0, sec.max_capacity - enrolled);
+        await safeRedis.set(this.getKey(sec.id), available.toString(), 'EX', 3600);
       }
-      console.log(`[Redis Seat Sync] Synced ${res.rows.length} course sections.`);
+      console.log(`[Redis Seat Sync] Synced ${sections.length} course sections from MongoDB.`);
     } catch (err: any) {
       console.warn('[Redis Seat Sync] Failed to sync seats:', err.message);
     }

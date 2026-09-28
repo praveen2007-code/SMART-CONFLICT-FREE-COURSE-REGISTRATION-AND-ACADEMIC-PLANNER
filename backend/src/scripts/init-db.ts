@@ -1,20 +1,18 @@
-import { pool } from '../config/db';
-import fs from 'fs';
-import path from 'path';
+import { connectDB } from '../config/db';
+import { seedMongoDatabase } from './seed-mongo';
+import mongoose from 'mongoose';
 
 async function run() {
-  const client = await pool.connect();
   try {
-    console.log('[Init DB] Reading schema.sql...');
-    const schemaPath = path.resolve(__dirname, '../../../database/schema.sql');
-    const sql = fs.readFileSync(schemaPath, 'utf8');
-    await client.query(sql);
-    console.log('[Init DB] Schema executed successfully!');
+    console.log('[Init DB] Connecting to MongoDB...');
+    await connectDB();
+    await seedMongoDatabase();
+    console.log('[Init DB] MongoDB initialized and seeded successfully!');
   } catch (err: any) {
-    console.error('[Init DB] Error executing schema:', err.message);
+    console.error('[Init DB] Error initializing database:', err.message);
   } finally {
-    client.release();
-    await pool.end();
+    await mongoose.disconnect();
+    process.exit(0);
   }
 }
 
