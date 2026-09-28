@@ -56,6 +56,15 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+// Role-based Home Router
+const HomeRoute: React.FC = () => {
+  const { user } = useAuth();
+  if (user?.role === 'ADMIN') {
+    return <Navigate to="/admin" replace />;
+  }
+  return <Dashboard />;
+};
+
 export const App: React.FC = () => {
   return (
     <Router>
@@ -68,7 +77,7 @@ export const App: React.FC = () => {
 
             {/* Protected Student / Faculty Portal */}
             <Route element={<ProtectedLayout />}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<HomeRoute />} />
               <Route path="/catalog" element={<CourseCatalog />} />
               <Route path="/planner" element={<CoursePlanner />} />
               <Route path="/timetable" element={<Timetable />} />

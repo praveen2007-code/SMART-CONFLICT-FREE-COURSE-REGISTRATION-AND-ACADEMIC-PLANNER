@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api } from '../api/client';
 import { Registration, AcademicRecommendation } from '../types';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   Sparkles,
   BookOpen,
@@ -20,6 +20,11 @@ import {
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { error } = useToast();
+
+  if (user?.role === 'ADMIN') {
+    return <Navigate to="/admin" replace />;
+  }
+
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [totalCredits, setTotalCredits] = useState(0);
   const [recommendations, setRecommendations] = useState<AcademicRecommendation[]>([]);

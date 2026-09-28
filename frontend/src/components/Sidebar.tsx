@@ -15,39 +15,42 @@ import {
 
 export const Sidebar: React.FC = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/catalog', label: 'Course Catalog', icon: BookOpen },
-    {
-      to: '/planner',
-      label: 'Smart Course Planner',
-      icon: Sparkles,
-      badge: 'AI Planner',
-      highlight: true
-    },
-    { to: '/timetable', label: 'Weekly Timetable', icon: CalendarDays },
-    { to: '/my-courses', label: 'My Courses', icon: BookmarkCheck },
-    { to: '/recommendations', label: 'Recommendations', icon: Compass },
-    { to: '/history', label: 'Registration History', icon: History },
-    { to: '/profile', label: 'My Profile', icon: User },
-  ];
-
-  if (user?.role === 'ADMIN') {
-    navItems.push({
-      to: '/admin',
-      label: 'Admin Control Center',
-      icon: ShieldAlert,
-      badge: 'Admin',
-      highlight: false
-    });
-  }
+  const navItems = isAdmin
+    ? [
+        {
+          to: '/admin',
+          label: 'Admin Control Center',
+          icon: ShieldAlert,
+          badge: 'Admin',
+          highlight: true
+        },
+        { to: '/catalog', label: 'Course Catalog', icon: BookOpen },
+        { to: '/profile', label: 'My Profile', icon: User },
+      ]
+    : [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/catalog', label: 'Course Catalog', icon: BookOpen },
+        {
+          to: '/planner',
+          label: 'Smart Course Planner',
+          icon: Sparkles,
+          badge: 'AI Planner',
+          highlight: true
+        },
+        { to: '/timetable', label: 'Weekly Timetable', icon: CalendarDays },
+        { to: '/my-courses', label: 'My Courses', icon: BookmarkCheck },
+        { to: '/recommendations', label: 'Recommendations', icon: Compass },
+        { to: '/history', label: 'Registration History', icon: History },
+        { to: '/profile', label: 'My Profile', icon: User },
+      ];
 
   return (
     <aside className="w-64 shrink-0 hidden lg:block border-r border-slate-200 bg-white min-h-[calc(100vh-4rem)] p-4">
       <div className="space-y-1">
         <div className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-          Student Portal
+          {isAdmin ? 'Staff / Admin Portal' : 'Student Portal'}
         </div>
         {navItems.map((item) => {
           const Icon = item.icon;
