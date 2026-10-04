@@ -1,22 +1,17 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: smart_planner_postgres
+  mongo:
+    image: mongo:7.0
+    container_name: smart_planner_mongo
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secure_password}
-      POSTGRES_DB: ${DB_NAME:-course_registration_db}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${MONGO_PORT:-27017}:27017"
     volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+      - mongo_data:/data/db
+      - ./database/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-course_registration_db}"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -46,18 +41,13 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-course_registration_db}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres_secure_password}
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_password}@postgres:5432/${DB_NAME:-course_registration_db}
+      MONGODB_URI: mongodb://mongo:27017/course_registration
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_university_planner_2026!}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
     depends_on:
-      postgres:
+      mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -76,5 +66,5 @@ services:
       - backend
 
 volumes:
-  pg_data:
+  mongo_data:
   redis_data:
