@@ -39,7 +39,7 @@ export const Navbar: React.FC = () => {
                 </span>
                 <span className="text-slate-300">|</span>
                 <span className="text-emerald-700 font-semibold">
-                  GPA: {user.student.currentGpa.toFixed(2)}
+                  Status: Active
                 </span>
               </div>
             )}

@@ -73,13 +73,13 @@ export const Profile: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[10px] uppercase font-bold tracking-wider">Cumulative GPA</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider">Academic Standing</span>
             <Award className="w-4 h-4 text-amber-500" />
           </div>
           <span className="text-2xl font-black text-slate-900">
-            {user?.student?.currentGpa?.toFixed(2) || '3.82'}
+            Good Standing
           </span>
-          <p className="text-[11px] text-emerald-600 font-semibold mt-1">Dean's Honor Roll</p>
+          <p className="text-[11px] text-emerald-600 font-semibold mt-1">Regular Student</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">

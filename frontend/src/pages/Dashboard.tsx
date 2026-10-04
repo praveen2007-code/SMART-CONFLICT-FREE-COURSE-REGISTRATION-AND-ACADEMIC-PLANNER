@@ -147,19 +147,16 @@ export const Dashboard: React.FC = () => {
         {/* Metric 3: Academic Standing */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider">Current GPA</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Academic Standing</span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <Award className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {user?.student?.currentGpa?.toFixed(2) || '3.82'}
-            </span>
-            <span className="text-xs text-slate-500">/ 4.00</span>
+            <span className="text-2xl font-black text-slate-900">Good Standing</span>
           </div>
           <p className="text-[11px] text-purple-700 font-medium mt-3">
-            Dean's Honors Standing
+            Semester {user?.student?.semester || 1} • Regular Status
           </p>
         </div>
 

@@ -90,10 +90,10 @@ export const Recommendations: React.FC = () => {
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Cumulative GPA
+              Academic Standing
             </span>
             <span className="text-lg font-black text-emerald-600">
-              {studentSummary.currentGpa.toFixed(2)}
+              Good Standing
             </span>
           </div>
         </div>

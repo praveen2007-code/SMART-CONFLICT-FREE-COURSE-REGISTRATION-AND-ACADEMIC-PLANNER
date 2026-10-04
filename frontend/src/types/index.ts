@@ -10,7 +10,7 @@ export interface User {
     studentCode: string;
     semester: number;
     maxCredits: number;
-    currentGpa: number;
+    currentGpa?: number;
     departmentName: string;
     departmentCode: string;
   } | null;
