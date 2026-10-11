@@ -38,6 +38,12 @@ frontend/dist/
 *.sln
 *.sw?
 
+# Database storage
+mongo-data/
+database/mongo-data/
+backend/data/
+data/
+
 # OS Files
 Thumbs.db
 ehthumbs.db

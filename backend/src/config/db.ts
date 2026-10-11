@@ -21,15 +21,27 @@ export async function connectDB(): Promise<void> {
     console.log('🚀 Initializing zero-config in-memory MongoDB server (mongodb-memory-server)...');
 
     try {
+      const path = await import('path');
+      const fs = await import('fs');
+      const dataDir = path.resolve(__dirname, '../../../database/mongo-data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+
       const { MongoMemoryServer } = await import('mongodb-memory-server');
-      const mongod = await MongoMemoryServer.create();
+      const mongod = await MongoMemoryServer.create({
+        instance: {
+          dbPath: dataDir,
+          storageEngine: 'wiredTiger'
+        }
+      });
       const inMemoryUri = mongod.getUri();
 
       await mongoose.connect(inMemoryUri);
       isConnected = true;
-      console.log(`✅ In-Memory MongoDB running and connected at: ${inMemoryUri}`);
+      console.log(`✅ Persistent MongoDB running and connected (data stored at: ${dataDir})`);
     } catch (memErr: any) {
-      console.error('❌ Failed to start in-memory MongoDB:', memErr.message);
+      console.error('❌ Failed to start persistent MongoDB:', memErr.message);
       throw memErr;
     }
   }
