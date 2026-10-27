@@ -9,13 +9,8 @@ export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '5000', 10),
 
-  // Database
-  DB_HOST: process.env.DB_HOST || 'localhost',
-  DB_PORT: parseInt(process.env.DB_PORT || '5432', 10),
-  DB_NAME: process.env.DB_NAME || 'course_registration_db',
-  DB_USER: process.env.DB_USER || 'postgres',
-  DB_PASSWORD: process.env.DB_PASSWORD || 'postgres_secure_password',
-  DATABASE_URL: process.env.DATABASE_URL,
+  // Database (MongoDB)
+  MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/course_registration',
 
   // Redis
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',

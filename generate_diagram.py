@@ -157,13 +157,13 @@ draw.rounded_rectangle([(d_x1, d_y1), (d_x2, d_y2)], radius=24, fill=(254, 252, 
 draw_centered_text(draw, "Data tier", 600, d_y1 + 18, font_tier_hdr, fill=(180, 83, 9))
 
 # Angled Arrows Services -> Data Tier
-draw_arrow_angled(draw, 450, 970, 360, 1220, label="Mongoose ODM / ACID transactions", label_dx=-50, label_dy=-15)
+draw_arrow_angled(draw, 450, 970, 360, 1220, label="ACID transactions", label_dx=-50, label_dy=-15)
 draw_arrow_angled(draw, 750, 970, 840, 1220, label="INCR / DECR, lock", label_dx=40, label_dy=-15)
 
-# Left Cylinder: MongoDB Database
+# Left Cylinder: PostgreSQL 16
 draw_cylinder(draw, 160, 1220, 560, 1390, fill=(255, 255, 255), outline=(100, 116, 139),
-              title="MongoDB Database",
-              line1="collections, schemas, constraints,",
+              title="PostgreSQL 16",
+              line1="normalised schema, constraints,",
               line2="indexes, audit log")
 
 # Right Cylinder: Redis 7

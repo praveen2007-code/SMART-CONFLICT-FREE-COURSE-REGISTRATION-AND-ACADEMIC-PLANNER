@@ -313,7 +313,7 @@ def generate_figure_4_4():
         ("Student\n(React UI)", X_STU, (238, 242, 255), (165, 180, 252)),
         ("Express API", X_API, (241, 245, 249), (148, 163, 184)),
         ("Redis", X_REDIS, (254, 242, 242), (252, 165, 165)),
-        ("MongoDB Database", X_DB, (236, 253, 245), (110, 231, 183)),
+        ("PostgreSQL", X_DB, (236, 253, 245), (110, 231, 183)),
     ]
 
     # Draw Header Lifeline Boxes
@@ -376,10 +376,10 @@ def generate_figure_4_4():
     # 7. remaining seats (>= 0) (dashed)
     draw_msg(590, X_API, X_REDIS, "remaining seats (>= 0)", dashed=True, arrow_dir="backward")
 
-    # 8. INSERT enrollment; INSERT audit_log -> MongoDB
-    draw_msg(660, X_API, X_DB, "INSERT enrollment; INSERT audit_log;")
+    # 8. BEGIN; INSERT enrollment; INSERT audit_log; COMMIT -> PostgreSQL
+    draw_msg(660, X_API, X_DB, "BEGIN; INSERT enrollment; INSERT audit_log; COMMIT")
 
-    # 9. saved / committed (dashed)
+    # 9. committed (dashed)
     draw_msg(730, X_API, X_DB, "committed", dashed=True, arrow_dir="backward")
 
     # 10. DEL lock key -> Redis
@@ -391,7 +391,7 @@ def generate_figure_4_4():
     # Bottom Failure Note Box
     nb_y1, nb_y2 = 940, 1030
     d.rounded_rectangle([(200, nb_y1), (1000, nb_y2)], radius=16, fill=(255, 251, 235), outline=(245, 158, 11), width=2)
-    draw_centered_text(d, "Failure path: if DECR returns < 0, or database insert fails, the API runs INCR seats:{sectionId}", 600, nb_y1 + 16, font_lbl, fill=(180, 83, 9))
+    draw_centered_text(d, "Failure path: if DECR returns < 0, or the transaction aborts, the API runs INCR seats:{sectionId}", 600, nb_y1 + 16, font_lbl, fill=(180, 83, 9))
     draw_centered_text(d, "(restoring the seat), releases the lock and returns an error to the student.", 600, nb_y1 + 44, font_lbl, fill=(180, 83, 9))
 
     # Caption
