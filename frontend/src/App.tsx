@@ -17,6 +17,8 @@ import { Recommendations } from './pages/Recommendations';
 import { RegistrationHistory } from './pages/RegistrationHistory';
 import { Profile } from './pages/Profile';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { DepartmentAnalytics } from './pages/DepartmentAnalytics';
+import { RegistrationFeed } from './pages/RegistrationFeed';
 
 // Protected Route Guard
 const ProtectedLayout: React.FC = () => {
@@ -92,6 +94,22 @@ export const App: React.FC = () => {
                 element={
                   <AdminRoute>
                     <AdminDashboard />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <AdminRoute>
+                    <DepartmentAnalytics />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/registration-feed"
+                element={
+                  <AdminRoute>
+                    <RegistrationFeed />
                   </AdminRoute>
                 }
               />

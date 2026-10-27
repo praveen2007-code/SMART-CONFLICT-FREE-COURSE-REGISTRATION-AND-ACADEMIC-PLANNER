@@ -229,8 +229,8 @@ export const Dashboard: React.FC = () => {
                       <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">
                         {reg.courseCode}
                       </span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                        Sec {reg.sectionCode}
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 whitespace-nowrap">
+                        {reg.sectionCode?.replace(/^SEC-/, 'Section ') || 'Section A'}
                       </span>
                       <span className="text-xs text-slate-400">• {reg.credits} Credits</span>
                     </div>

@@ -12,23 +12,26 @@ async function handleResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (!text || text.trim().length === 0) {
     if (!res.ok) {
-      throw new Error(`Server returned error ${res.status} (${res.statusText}). Please check that backend is running.`);
+      throw new Error(`Server returned error ${res.status} (${res.statusText}).`);
     }
     return {} as T;
   }
 
+  let json: any;
   try {
-    const json = JSON.parse(text);
+    json = JSON.parse(text);
+  } catch {
     if (!res.ok) {
-      throw new Error(json.error || json.message || `API error (${res.status})`);
-    }
-    return json as T;
-  } catch (err: any) {
-    if (!res.ok) {
-      throw new Error(`Server error ${res.status}: Backend server may be offline or starting up.`);
+      throw new Error(`Server error ${res.status} (${res.statusText}).`);
     }
     throw new Error(`Invalid response format from server: ${text.substring(0, 80)}`);
   }
+
+  if (!res.ok) {
+    throw new Error(json.error || json.message || `API error (${res.status})`);
+  }
+
+  return json as T;
 }
 
 export const api = {
@@ -171,6 +174,12 @@ export const api = {
       });
       return handleResponse<any>(res);
     },
+    async getDepartmentAnalytics() {
+      const res = await fetch(`${API_BASE}/admin/department-analytics`, {
+        headers: getAuthHeaders()
+      });
+      return handleResponse<any>(res);
+    },
     async createCourse(data: any) {
       const res = await fetch(`${API_BASE}/admin/courses`, {
         method: 'POST',
@@ -207,6 +216,13 @@ export const api = {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(data)
+      });
+      return handleResponse<any>(res);
+    },
+    async clearStudentData() {
+      const res = await fetch(`${API_BASE}/admin/clear-student-data`, {
+        method: 'POST',
+        headers: getAuthHeaders()
       });
       return handleResponse<any>(res);
     }

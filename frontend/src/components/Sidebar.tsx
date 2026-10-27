@@ -10,7 +10,9 @@ import {
   Compass,
   History,
   User,
-  ShieldAlert
+  ShieldAlert,
+  BarChart3,
+  Activity
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -24,6 +26,20 @@ export const Sidebar: React.FC = () => {
           label: 'Admin Control Center',
           icon: ShieldAlert,
           badge: 'Admin',
+          highlight: true
+        },
+        {
+          to: '/analytics',
+          label: 'Department Analytics',
+          icon: BarChart3,
+          badge: 'Analytics',
+          highlight: true
+        },
+        {
+          to: '/registration-feed',
+          label: 'Registration Feed',
+          icon: Activity,
+          badge: 'Live',
           highlight: true
         },
         { to: '/catalog', label: 'Course Catalog', icon: BookOpen },

@@ -202,10 +202,28 @@ export interface RegistrationLog {
   course_name?: string;
 }
 
+export interface SemesterRegistrationStat {
+  semester: number;
+  semesterLabel: string;
+  shortLabel: string;
+  registeredStudents: number;
+  totalEnrollments: number;
+  totalCourses: number;
+  totalSections: number;
+  cohortStudents: number;
+  deptBreakdown: {
+    CS: number;
+    DS: number;
+    EE: number;
+    MATH: number;
+  };
+}
+
 export interface AdminStats {
   totalStudents: number;
   totalCourses: number;
   activeRegistrations: number;
   fullCoursesCount: number;
   lowEnrollmentCount: number;
+  semesterRegistrations?: SemesterRegistrationStat[];
 }
