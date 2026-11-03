@@ -13,7 +13,6 @@ const app = express();
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, docker internal)
       if (!origin) return callback(null, true);
       return callback(null, true);
     },
@@ -34,26 +33,52 @@ if (ENV.NODE_ENV === 'development') {
   });
 }
 
-// Lazy initialization for serverless (Vercel) compatibility
+// Health check — BEFORE initialization middleware so it always responds
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'UP',
+    timestamp: new Date().toISOString(),
+    service: 'Smart Course Registration API',
+    environment: ENV.NODE_ENV
+  });
+});
+
+// Lazy initialization state
 let initialized = false;
+let initError: string | null = null;
+
 const initializeApp = async () => {
   if (initialized) return;
   initialized = true;
-  const dbOk = await initDatabase();
-  if (dbOk) {
-    await connectRedis();
-    await SeatService.syncAllSeats();
+  try {
+    const dbOk = await initDatabase();
+    if (dbOk) {
+      await connectRedis();
+      try {
+        await SeatService.syncAllSeats();
+      } catch (syncErr: any) {
+        console.warn('[Seats] Sync warning:', syncErr.message);
+      }
+    }
+  } catch (err: any) {
+    initError = err.message;
+    console.error('[Init] Initialization error:', err.message);
+    // Reset so next request retries
+    initialized = false;
   }
 };
 
-// Run initialization middleware before all routes
+// Initialization middleware — non-blocking, graceful degradation
 app.use(async (req, res, next) => {
-  try {
-    await initializeApp();
-    next();
-  } catch (err) {
-    next(err);
+  if (!initialized) {
+    try {
+      await initializeApp();
+    } catch (err: any) {
+      console.error('[Middleware] Init error:', err.message);
+      // Allow request through even if init fails
+    }
   }
+  next();
 });
 
 // API Routes
@@ -62,7 +87,7 @@ app.use('/api', apiRouter);
 // Error Handling Middleware
 app.use(errorHandler);
 
-// Only start HTTP server in non-serverless environments (local dev)
+// Only start HTTP server when not in Vercel serverless
 if (!process.env.VERCEL) {
   const startServer = async () => {
     console.log('====================================================');
