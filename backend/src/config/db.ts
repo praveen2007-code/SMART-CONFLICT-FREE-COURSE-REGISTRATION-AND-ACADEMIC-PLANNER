@@ -12,12 +12,19 @@ export async function connectDB(): Promise<void> {
   try {
     console.log(`🔌 Attempting to connect to MongoDB at: ${mongoUri}`);
     await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 2500 // Fail fast if no local/remote Mongo server
+      serverSelectionTimeoutMS: 10000 // 10 seconds for cloud connections
     });
     isConnected = true;
     console.log('✅ Connected to MongoDB database successfully.');
   } catch (err: any) {
     console.warn(`⚠️ Could not connect to external MongoDB (${err.message}).`);
+
+    // Skip in-memory server on Vercel (serverless environment)
+    if (process.env.VERCEL) {
+      console.error('❌ Cannot use mongodb-memory-server on Vercel. Check MONGODB_URI env variable.');
+      throw new Error('MongoDB Atlas connection failed on Vercel: ' + err.message);
+    }
+
     console.log('🚀 Initializing zero-config in-memory MongoDB server (mongodb-memory-server)...');
 
     try {

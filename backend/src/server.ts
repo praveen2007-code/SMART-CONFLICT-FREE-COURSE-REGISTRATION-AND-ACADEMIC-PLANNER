@@ -34,38 +34,53 @@ if (ENV.NODE_ENV === 'development') {
   });
 }
 
+// Lazy initialization for serverless (Vercel) compatibility
+let initialized = false;
+const initializeApp = async () => {
+  if (initialized) return;
+  initialized = true;
+  const dbOk = await initDatabase();
+  if (dbOk) {
+    await connectRedis();
+    await SeatService.syncAllSeats();
+  }
+};
+
+// Run initialization middleware before all routes
+app.use(async (req, res, next) => {
+  try {
+    await initializeApp();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API Routes
 app.use('/api', apiRouter);
 
 // Error Handling Middleware
 app.use(errorHandler);
 
-// Start Server
-const startServer = async () => {
-  console.log('====================================================');
-  console.log(' Starting Smart Course Registration & Academic Planner API');
-  console.log('====================================================');
-
-  // Initialize DB
-  const dbOk = await initDatabase();
-  if (dbOk) {
-    // Connect Redis
-    await connectRedis();
-    // Synchronize initial seats into Redis
-    await SeatService.syncAllSeats();
-  }
-
-  app.listen(ENV.PORT, () => {
-    console.log(`🚀 Server listening on http://localhost:${ENV.PORT}`);
-    console.log(`📡 REST API available at http://localhost:${ENV.PORT}/api`);
-    console.log(`🩺 Health check at http://localhost:${ENV.PORT}/api/health`);
+// Only start HTTP server in non-serverless environments (local dev)
+if (!process.env.VERCEL) {
+  const startServer = async () => {
     console.log('====================================================');
-  });
-};
+    console.log(' Starting Smart Course Registration & Academic Planner API');
+    console.log('====================================================');
+    await initializeApp();
+    app.listen(ENV.PORT, () => {
+      console.log(`🚀 Server listening on http://localhost:${ENV.PORT}`);
+      console.log(`📡 REST API available at http://localhost:${ENV.PORT}/api`);
+      console.log(`🩺 Health check at http://localhost:${ENV.PORT}/api/health`);
+      console.log('====================================================');
+    });
+  };
 
-startServer().catch((err) => {
-  console.error('Fatal bootstrap error:', err);
-  process.exit(1);
-});
+  startServer().catch((err) => {
+    console.error('Fatal bootstrap error:', err);
+    process.exit(1);
+  });
+}
 
 export default app;
