@@ -1,0 +1,21 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const adminController_1 = require("../controllers/adminController");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+// Protect all admin endpoints with ADMIN role guard
+router.use(auth_1.authenticateJwt);
+router.use((0, auth_1.requireRole)('ADMIN'));
+router.get('/stats', adminController_1.AdminController.getStats);
+router.get('/registrations', adminController_1.AdminController.getRegistrations);
+router.get('/department-analytics', adminController_1.AdminController.getDepartmentAnalytics);
+router.post('/courses', adminController_1.AdminController.createCourse);
+router.post('/clear-all-courses', adminController_1.AdminController.clearAllCourses);
+router.post('/populate-all-courses', adminController_1.AdminController.populateAllCourses);
+router.put('/courses/:id', adminController_1.AdminController.updateCourse);
+router.delete('/courses/:id', adminController_1.AdminController.deleteCourse);
+router.post('/sections', adminController_1.AdminController.createSection);
+router.put('/sections/:id', adminController_1.AdminController.updateSection);
+router.post('/clear-student-data', adminController_1.AdminController.clearStudentData);
+exports.default = router;

@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const plannerController_1 = require("../controllers/plannerController");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticateJwt);
+router.post('/check-conflicts', plannerController_1.PlannerController.checkConflicts);
+router.post('/generate', plannerController_1.PlannerController.generateBestSchedule);
+exports.default = router;
