@@ -10,6 +10,7 @@ export const redis = new Redis({
   host: ENV.REDIS_HOST,
   port: ENV.REDIS_PORT,
   password: ENV.REDIS_PASSWORD,
+  tls: ENV.REDIS_TLS ? {} : undefined,
   maxRetriesPerRequest: 1,
   retryStrategy: (times) => {
     if (times > 5) {

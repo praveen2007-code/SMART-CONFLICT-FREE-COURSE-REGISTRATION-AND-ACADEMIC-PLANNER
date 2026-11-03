@@ -16,6 +16,7 @@ export const ENV = {
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || undefined,
+  REDIS_TLS: process.env.REDIS_TLS === 'true' || (process.env.REDIS_HOST || '').includes('upstash.io'),
 
   // JWT
   JWT_SECRET: process.env.JWT_SECRET || 'super_secret_jwt_key_university_planner_2026!',
